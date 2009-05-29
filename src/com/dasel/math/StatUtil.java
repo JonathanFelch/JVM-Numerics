@@ -1,12 +1,6 @@
 package com.dasel.math;
 
-/**
- * Created by IntelliJ IDEA.
- * User: Jonathan
- * Date: May 29, 2009
- * Time: 4:46:28 PM
- * To change this template use File | Settings | File Templates.
- */
+
 /**
  * Class contains the implementation of:
  * - Inverse Normal Cummulative Distribution Function Algorythm

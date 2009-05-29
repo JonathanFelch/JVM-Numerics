@@ -1,9 +1,8 @@
 /**
- * Created by IntelliJ IDEA.
  * User: Jonathan
  * Date: May 29, 2009
  * Time: 5:58:54 PM
- * To change this template use File | Settings | File Templates.
+ * Copyright (c) 2009, DASEL Software, Inc.  All Rights Reserved 
  */
 
 import com.dasel.math.NumericGrid

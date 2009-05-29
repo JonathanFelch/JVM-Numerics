@@ -9,7 +9,7 @@ import java.util.concurrent.Future;
  * User: Jonathan
  * Date: May 29, 2009
  * Time: 4:33:01 PM
- * To change this template use File | Settings | File Templates.
+* Copyright (c) 2009, DASEL Software, Inc.  All Rights Reserved
  */
 
 public class NumericGrid {

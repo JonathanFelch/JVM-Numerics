@@ -13,7 +13,7 @@ import java.util.ArrayList;
  * User: Jonathan
  * Date: May 29, 2009
  * Time: 4:30:37 PM
- * To change this template use File | Settings | File Templates.
+* Copyright (c) 2009, DASEL Software, Inc.  All Rights Reserved
  */
 public class ParallelMathHelper {
     static ExecutorService service = null;
