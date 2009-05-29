@@ -13,7 +13,7 @@ def eulerMethod = { spotPrice, time, riskFreeRate, volatility, normalRandom ->
 }
 
 def spotPrices = [80,90,100,110,120]
-def gaussian  = NumericGrid.createQuasiGuassian(1000,1000);
+def gaussian  = NumericGrid.createQuasiGaussian(1000,1000);
 
 def paths
 def vol = 0.15, riskFreeRate = 0.03, time = 1.0

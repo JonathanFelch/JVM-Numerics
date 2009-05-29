@@ -352,7 +352,7 @@ public class NumericGrid {
   }
 
   def createCorrelateNormal(Number coor) {
-    def z2 = NumericGrid.createQuasiGuassian(rows,cols)
+    def z2 = NumericGrid.createQuasiGaussian(rows,cols)
     z2.shuffle()
     return multiply(coor) * (1 - coor * coor) * z2
   }
@@ -401,7 +401,7 @@ public class NumericGrid {
     }
   }
 
-  public static NumericGrid createQuasiGuassian(int rows, int cols) {
+  public static NumericGrid createQuasiGaussian(int rows, int cols) {
     int col = 0;
     int row = 0;
     double step = 1.0 / (rows * cols + 1)
@@ -500,7 +500,7 @@ public class NumericGrid {
   }
 
   public static void test(String[] args) {
-    def guassian = NumericGrid.createQuasiGuassian(100,100)
+    def guassian = NumericGrid.createQuasiGaussian(100,100)
     NumericGrid.enhanceNumber()
     println guassian
     guassian.shuffle()
@@ -514,7 +514,7 @@ public class NumericGrid {
   }
 
   public static void main(String[] args) {
-    def guassian = NumericGrid.createQuasiGuassian(1000,1000)
+    def guassian = NumericGrid.createQuasiGaussian(1000,1000)
     NumericGrid.enhanceNumber()
     def size = guassian.size();
     double drift = 0.05 - 0.5 * 0.15 * 0.15
