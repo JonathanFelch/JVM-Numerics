@@ -1,6 +1,7 @@
 package com.dasel.math
 
-import java.util.concurrent.Future;
+import java.util.concurrent.Future
+import org.apache.commons.math.distribution.NormalDistributionImpl;
 
 /**
  *
@@ -13,6 +14,7 @@ import java.util.concurrent.Future;
  */
 
 public class NumericGrid {
+  static NormalDistributionImpl normalDist = new NormalDistributionImpl()
 
   def data = new double[0][0];
   def rows = 0;
@@ -158,9 +160,9 @@ public class NumericGrid {
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.minOf(data[i]))
     }
-    def max = futures.collect {
+    def max = futures.collect {  future ->
       future.get()
-    }.max()
+    }.min()
   }
 
 
@@ -401,14 +403,17 @@ public class NumericGrid {
     }
   }
 
-  public static NumericGrid createQuasiGaussian(int rows, int cols) {
+  public static NumericGrid createQuasiGaussian(def rows, cols) {
+    rows = (int)rows
+    cols = (int)cols
     int col = 0;
     int row = 0;
     double step = 1.0 / (rows * cols + 1)
     double draw = step
     double[][] data = new double[rows][cols]
     while (draw <= 0.50) {
-      double value = StatUtil.getInvCDF(draw,false)
+      def value = normalDist.inverseCumulativeProbability(draw)
+      //double value = StatUtil.getInvCDF(draw,true)
       data[row][col] = value;
       data[rows-row-1][cols-col-1] = -value
       col++
@@ -496,6 +501,10 @@ public class NumericGrid {
 
     Number.metaClass.exp = {
       return Math.exp(delegate)
+    }
+
+    Number.metaClass.avg = {
+      return delegate
     }
   }
 
