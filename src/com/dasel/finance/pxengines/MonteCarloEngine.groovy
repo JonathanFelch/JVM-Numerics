@@ -7,6 +7,7 @@ import com.dasel.finance.options.PayoutType
 import com.dasel.finance.options.SimpleOption
 import com.dasel.math.ParallelMathHelper
 import java.text.NumberFormat
+import org.apache.commons.math.distribution.NormalDistributionImpl
 
 /**
  * Created by IntelliJ IDEA.
@@ -17,11 +18,12 @@ import java.text.NumberFormat
  */
 
 public class MonteCarloEngine {
+  def mandatoryIterations = null
   def size = 100
   def timeHorizen
   def pathGenerator
   def options = []
-
+  def paths = null
   def yieldCurve = new LinearInterpolation([ 0.003:0.05, 1000:0.05])
   //def yieldCurve = new LinearInterpolation([ 0.003:0.0125, 0.25:0.025, 0.5:0.04, 1.0: 0.05, 2.0: 0.0591, 3.0:0554, 5.0:0.0634, 7.0:0.0625, 10.0:0.03125, 30.0:0.0425 ])
   def priceAccuracy = 0.005
@@ -44,11 +46,14 @@ public class MonteCarloEngine {
     table
   }
 
-  def runSimulation() {
-    size = 100
-    def start = System.currentTimeMillis()
-    def stochaticVariables = stochasticProcess(size)
-    def paths = pathGenerator(stochaticVariables)
+  def generateFixedNumberOfPaths(count) {
+    def stochaticVariables = stochasticProcess(count)
+    paths = pathGenerator(stochaticVariables)
+    paths
+  }
+
+  def generatePathsSufficientForPriceConfergence() {
+    paths = generateFixedNumberOfPaths(100)
     def stdDev = paths.stdDev()
     def stdErr = convergenceTest(size,stdDev)
     while (stdErr > priceAccuracy) {
@@ -57,16 +62,30 @@ public class MonteCarloEngine {
     }
     def flag = true
     while (flag) {
-      stochaticVariables = stochasticProcess(size)
-      paths = pathGenerator(stochaticVariables)
-      stdDev = paths.stdDev()
+      paths = generateFixedNumberOfPaths(size)
       stdErr = convergenceTest(size,stdDev)
       flag = stdErr > priceAccuracy
       if (flag) {
         size *= stdErr / priceAccuracy
       } else {
+        // initial std dev estimate was based on a sample of 100, so validate the assumption if within 25%
+        if (stdErr / priceAccuracy > 0.8) {
+          stdDev = paths.stdDev()
+          stdErr = convergenceTest(size,stdDev)
+          flag = stdErr > priceAccuracy
+        }
         size = paths.size()
       }
+    }
+    paths
+  }
+
+  def runSimulation() {
+    long start = System.currentTimeMillis()
+    if (mandatoryIterations) {
+      paths = generateFixedNumberOfPaths(mandatoryIterations)
+    } else {
+      paths = generatePathsSufficientForPriceConfergence()
     }
     def options = priceOptions(paths)
     println "${(System.currentTimeMillis() - start) / 1000.0} Seconds"
@@ -74,6 +93,14 @@ public class MonteCarloEngine {
   }
 
   public static void main(String[] args) {
+    100.times {
+      test(args)
+    }
+    ParallelMathHelper.shutdownPool()
+  }
+
+  public static void test(String[] args) {
+    NormalDistributionImpl normalDist = new NormalDistributionImpl()
     NumberFormat frmt = NumberFormat.getNumberInstance()
     frmt.setMaximumFractionDigits 2
     frmt.setMinimumFractionDigits 2
@@ -94,38 +121,36 @@ public class MonteCarloEngine {
     }
     engine.pathGenerator = closure
     def options = engine.runSimulation() 
-    options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
-    }
+    //options.each { option, price ->
+    //  println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    //}
 
     brownianMotion.time = 0.5
     engine.timeHorizen = 0.5
     options = engine.runSimulation()
-    options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
-    }
+    //options.each { option, price ->
+    //  println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    //}
 
     brownianMotion.time = 0.25
     engine.timeHorizen = 0.25
     options = engine.runSimulation()
-    options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
-    }
+    //options.each { option, price ->
+    //  println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    //}
 
     brownianMotion.time = 0.08333333
     engine.timeHorizen = 0.08333333
     options = engine.runSimulation()
-    options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
-    }
+   // options.each { option, price ->
+   //   println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+   // }
 
     brownianMotion.time = 1.0
     engine.timeHorizen = 1.0
     options = engine.runSimulation()
-    options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
-    }
-    ParallelMathHelper.shutdownPool()
-    
+   // options.each { option, price ->
+   //   println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+   // }
   }
 }
