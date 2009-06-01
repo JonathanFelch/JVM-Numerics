@@ -6,6 +6,7 @@ import com.dasel.finance.equity.LogNormalPathHelper
 import com.dasel.finance.options.PayoutType
 import com.dasel.finance.options.SimpleOption
 import com.dasel.math.ParallelMathHelper
+import java.text.NumberFormat
 
 /**
  * Created by IntelliJ IDEA.
@@ -25,7 +26,7 @@ public class MonteCarloEngine {
   //def yieldCurve = new LinearInterpolation([ 0.003:0.0125, 0.25:0.025, 0.5:0.04, 1.0: 0.05, 2.0: 0.0591, 3.0:0554, 5.0:0.0634, 7.0:0.0625, 10.0:0.03125, 30.0:0.0425 ])
   def priceAccuracy = 0.005
   def convergenceTest = { size, standardDeviation ->
-    standardDeviation / size
+    2.96 * standardDeviation / Math.sqrt(size)
   }
   def stochasticProcess = { size ->
     def length = Math.round(Math.sqrt(size)) + 1
@@ -44,6 +45,8 @@ public class MonteCarloEngine {
   }
 
   def runSimulation() {
+    size = 100
+    def start = System.currentTimeMillis()
     def stochaticVariables = stochasticProcess(size)
     def paths = pathGenerator(stochaticVariables)
     def stdDev = paths.stdDev()
@@ -60,17 +63,26 @@ public class MonteCarloEngine {
       stdErr = convergenceTest(size,stdDev)
       flag = stdErr > priceAccuracy
       if (flag) {
-        size *= Math.max(stdErr / priceAccuracy,2)
+        size *= stdErr / priceAccuracy
       } else {
         size = paths.size()
       }
     }
-    priceOptions(paths)
+    def options = priceOptions(paths)
+    println "${(System.currentTimeMillis() - start) / 1000.0} Seconds"
+    options
   }
 
   public static void main(String[] args) {
+    NumberFormat frmt = NumberFormat.getNumberInstance()
+    frmt.setMaximumFractionDigits 2
+    frmt.setMinimumFractionDigits 2
+
     def strikes = [80, 90, 100, 110, 120]
     MonteCarloEngine engine = new MonteCarloEngine()
+    engine.convergenceTest = { size, standardDeviation ->
+       2.96 * standardDeviation / size
+    }
     engine.timeHorizen = 1.0
     strikes.each { strike ->
       engine.options << new SimpleOption( strike : strike, payoutType : PayoutType.Put, name : "${strike} Strike 1 Yr Put" )
@@ -83,7 +95,35 @@ public class MonteCarloEngine {
     engine.pathGenerator = closure
     def options = engine.runSimulation() 
     options.each { option, price ->
-      println "Contract: ${option.name} was priced @ ${price} over ${engine.size} iterations"
+      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    }
+
+    brownianMotion.time = 0.5
+    engine.timeHorizen = 0.5
+    options = engine.runSimulation()
+    options.each { option, price ->
+      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    }
+
+    brownianMotion.time = 0.25
+    engine.timeHorizen = 0.25
+    options = engine.runSimulation()
+    options.each { option, price ->
+      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    }
+
+    brownianMotion.time = 0.08333333
+    engine.timeHorizen = 0.08333333
+    options = engine.runSimulation()
+    options.each { option, price ->
+      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
+    }
+
+    brownianMotion.time = 1.0
+    engine.timeHorizen = 1.0
+    options = engine.runSimulation()
+    options.each { option, price ->
+      println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"
     }
     ParallelMathHelper.shutdownPool()
     
