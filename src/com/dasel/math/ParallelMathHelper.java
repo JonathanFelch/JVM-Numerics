@@ -1,12 +1,10 @@
 package com.dasel.math;
 
-import java.util.concurrent.Callable;
-
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Random;
+import java.util.Arrays;
 
 /**
  * Created by IntelliJ IDEA.
@@ -16,8 +14,10 @@ import java.util.ArrayList;
 * Copyright (c) 2009, DASEL Software, Inc.  All Rights Reserved
  */
 public class ParallelMathHelper {
+    static Random random = new Random();
     static ExecutorService service = null;
     static int threadCount = 4;
+    static int FORK_ARRAY_SIZE = 1000000;
 
     public static void startIfNeeded() {
         getService();
@@ -27,7 +27,7 @@ public class ParallelMathHelper {
         synchronized (ParallelMathHelper.class) {
             if (service == null) {
                 service = Executors.newFixedThreadPool(threadCount);
-                NumericGrid.enhanceNumber();
+                GroovyNumerics.initDSL();
             }
         }
         return service;
@@ -35,6 +35,28 @@ public class ParallelMathHelper {
 
     public static void shutdownPoolNow() {
         ParallelMathHelper.getService().shutdownNow();
+    }
+
+    public static Callable remapData(final double[][] data,  final Number oldColumnCount,  final Number targetRow, final Number columnCount ) {
+        return new Callable() {
+            public Object call() throws Exception {
+                int cols = columnCount.intValue();
+                int srcCols = oldColumnCount.intValue();
+                int origin = (cols * targetRow.intValue());
+                int sourceRow = origin / srcCols;
+                int sourceCol = origin % srcCols;
+                double[] newVector = new double[cols];
+                for (int i = 0; i < cols; i++) {
+                    newVector[i] = data[sourceRow][sourceCol];
+                    sourceCol++;
+                    if (sourceCol >= srcCols) {
+                        sourceCol = 0;
+                        sourceRow++;
+                    }
+                }
+                return newVector;
+            }
+        };
     }
 
     public static ExecutorService createNewPool() {
@@ -76,6 +98,153 @@ public class ParallelMathHelper {
         return c;
     }
 
+    // WARNING! Does not lock on data!  Threads MUST access different collumns to be safe!
+
+    public static Callable shuffleCol(final double[][] data, final int col) {
+        return new Callable() {
+            int len = data.length;
+            public Object call() throws Exception {
+                for (int i = 0; i < data.length; i++) {
+                    double temp = data[i][col];
+                    int index = random.nextInt(len);
+                    data[i][col] = data[index][col];
+                    data[index][col] = temp;
+                }
+                return data;
+            }
+        };
+    }
+
+    public static Callable shuffleRow(final double[] data) {
+        return new Callable() {
+            int len = data.length;
+            public Object call() throws Exception {
+                for (int i = 0; i < data.length; i++) {
+                    double temp = data[i];
+                    int index = random.nextInt(len);
+                    data[i] = data[index];
+                    data[index] = temp;
+                }
+                return data;
+            }
+        };
+    }
+
+
+    public static Callable shuffle(final double[][] data) {
+        final int rows = data.length;
+        int size = 0;
+        for (int i = 0; i < rows; i++) {
+            size += data[i].length;
+        }
+        if (size < ParallelMathHelper.FORK_ARRAY_SIZE) {
+            return new Callable() {
+                public Object call() throws Exception {
+                    ParallelMathHelper.simpleShuffle(data);
+                    return data;
+                }
+            };
+        }
+        return shuffleParallel(data);
+    }
+
+     public static Callable shuffleParallel(final double[][] data) {
+         final int rows = data.length;
+         return new Callable() {
+            public Object call() throws Exception {
+
+                Integer cols = null;
+                try {
+                    List<Future> tasks = new ArrayList<Future>();
+                    for (int i = 0; i < rows; i++) {
+                        if (i == 0) {
+                            cols = data[i].length;
+                        }
+                        Future f = ParallelMathHelper.getService().submit(ParallelMathHelper.shuffleRow(data[i]));
+                        tasks.add(f);
+                    }
+                    for (Future f : tasks) {
+                        f.get();
+                    }
+                    for (int i = 0; i < cols; i++) {
+                        Future f = ParallelMathHelper.getService().submit(ParallelMathHelper.shuffleCol(data,i));
+                        tasks.add(f);
+                    }
+                    for (Future f : tasks) {
+                        f.get();
+                    }
+                } catch (Exception e) {
+
+                }
+                return data;
+            }
+        };
+    }
+
+
+    public static void simpleShuffle(double[][] million) {
+        Random random = new Random();
+        int rows = million.length;
+        for (int i = 0; i < rows; i++) {
+            double[] data = million[i];
+            int cols = data.length;
+            for (int j = 0; j < cols; j++) {
+                int srcRow = random.nextInt(rows);
+                int srcCol = random.nextInt(cols);
+                double temp = data[j];
+                data[j] = million[srcRow][srcCol];
+                million[srcRow][srcCol] = temp;
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        int rows = 10;
+        int cols = 100000;
+
+        double[][] million = new double[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                million[i][j] = i*rows+j;
+            }
+        }
+
+
+        //for (int loop = 0; loop < 100; loop++) {
+        //    long start = System.currentTimeMillis();
+
+        //    for (int i = 0; i < rows; i++) {
+        //        double[] data = million[i];
+        //        int cols = data.length;
+        //        for (int j = 0; j < cols; j++) {
+        //            int srcRow = random.nextInt(rows);
+        //            int srcCol = random.nextInt(cols);
+        //            double temp = data[j];
+        //            data[j] = million[srcRow][srcCol];
+        //            million[srcRow][srcCol] = temp;
+        //        }
+        //    }
+        //}
+        for (int loop = 0; loop < 100; loop++) {
+            long start = System.currentTimeMillis();
+            try {
+                ParallelMathHelper.shuffle(million).call();
+            } catch (Exception e) { }
+
+            System.out.println("Parallel: time = "+(System.currentTimeMillis()-start)+" seconds");
+        }
+        for (int loop = 0; loop < 100; loop++) {
+            long start = System.currentTimeMillis();
+            simpleShuffle(million);
+            System.out.println("Simple: time = "+(System.currentTimeMillis()-start)+" seconds");
+        }
+        try {
+            ParallelMathHelper.shutdownPool();
+        } catch (InterruptedException e) {
+            e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+        }
+    }
+
 
     public static Callable copyFromList(final List list, final double[][] data, final int cols) {
         Callable c = new Callable() {
@@ -91,7 +260,8 @@ public class ParallelMathHelper {
                         col = 0;
                         data[row] = rowData;
                     }
-                    rowData[col] = (Double) list.get(i);
+                    Object o = list.get(i);
+                    rowData[col] = (Double)o;
                     col++;
 
                 }

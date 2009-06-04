@@ -14,8 +14,7 @@ import org.apache.commons.math.distribution.NormalDistributionImpl;
  */
 
 public class NumericGrid {
-  static NormalDistributionImpl normalDist = new NormalDistributionImpl()
-
+  
   def data = new double[0][0];
   def rows = 0;
   def cols = 0;
@@ -33,24 +32,52 @@ public class NumericGrid {
     cols = colCount;
   }
 
-  def static shutdownPool() {
+  def synchronized getValue(def row, col) {
+    data[row][col]
+  }
+
+  def synchronized setValue(def row, col, value) {
+    data[row][col] = value
+  }
+
+  def synchronized appendVertically(NumericGrid peer) {
+    assert peer.cols == cols
+    def ng = null
+    synchronized(this) {
+      def size = rows + peer.rows
+      def newGrid = new double[size][]
+      for (int i = 0; i < rows; i++) {
+        newGrid[i] = data[i]
+      }
+      for (int i = 0; i < peer.rows; i++) {
+        newGrid[i+rows] = peer.data[i]
+      }
+      ng = new NumericGrid(newGrid,peer.rows + rows,cols)
+    }
+    ng
+  }
+
+  def synchronized reshape(def newRows, newCols) {
+    assert (newRows * newCols) == (rows * cols)
+    def taskResults = []
+    for (int i = 0; i < newRows; i++) {
+      taskResults <<  ParallelMathHelper.getService().submit(ParallelMathHelper.remapData(data,cols,i,newCols))
+    }
+    double[][] matrixData = new double[newRows][];
+    for (int i = 0; i < newRows; i++) {
+      matrixData[i] = taskResults[i].get()
+    }
+    new NumericGrid(matrixData,newRows,newCols)
+  }
+
+
+
+  def static synchronized shutdownPool() {
     ParallelMathHelper.shutdownPool()
   }
 
-  def shuffle() {
-    def tasks = []
-    def biglist = Collections.synchronizedList(new ArrayList())
-    for (int i = 0; i < rows; i++) {
-      double[] vector = data[i]
-      def task = ParallelMathHelper.getService().submit(ParallelMathHelper.copyInto(biglist,vector))
-      tasks << task
-    }
-
-    //for (Future task : tasks) {
-    //   task.get()
-    //}
-    Collections.shuffle(biglist)
-    ParallelMathHelper.copyFromList(biglist,data,cols).call()
+  def synchronized shuffle() {
+    ParallelMathHelper.shuffle(data).call()
   }
  /*
   def shuffle() {
@@ -71,7 +98,7 @@ public class NumericGrid {
   }
   */
 
-  def sqrt() {
+  def synchronized sqrt() {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.sqrt(data[i]))
@@ -83,7 +110,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def max(NumericGrid right) {
+  def synchronized max(NumericGrid right) {
     def futures = []
     if (rows != right.rows) throw new Exception("Matrix A and Matrix B must be same size");
     for (int i = 0; i < rows; i++) {
@@ -96,7 +123,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def min(NumericGrid right) {
+  def synchronized min(NumericGrid right) {
     def futures = []
     if (rows != right.rows) throw new Exception("Matrix A and Matrix B must be same size");
     for (int i = 0; i < rows; i++) {
@@ -109,11 +136,11 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def stdDev() {
-    Math.sqrt(minus(avg()).square().avg())
+  def synchronized stdDev() {
+    minus(avg()).square().avg().sqrt()
   }
 
-  def valueOrAbove(Number value) {
+  def synchronized valueOrAbove(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -126,11 +153,11 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def square() {
+  def synchronized square() {
     multiply(this)
   }
 
-  def valueOrBelow(Number value) {
+  def synchronized valueOrBelow(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -145,7 +172,7 @@ public class NumericGrid {
 
 
 
-  def maxValue() {
+  def synchronized maxValue() {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.maxOf(data[i]))
@@ -155,7 +182,7 @@ public class NumericGrid {
     }.max()
   }
 
-  def minValue() {
+  def synchronized minValue() {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.minOf(data[i]))
@@ -166,7 +193,7 @@ public class NumericGrid {
   }
 
 
-  def sum() {
+  def synchronized sum() {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.sum(data[i]))
@@ -195,7 +222,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def plus(Number right) {
+  def synchronized plus(Number right) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -208,7 +235,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def power(Number exponent) {
+  def synchronized power(Number exponent) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -222,7 +249,7 @@ public class NumericGrid {
   }
 
 
-  def leftPower(Number base) {
+  def synchronized leftPower(Number base) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -236,9 +263,11 @@ public class NumericGrid {
   }
 
 
-  def multiply(NumericGrid right) {
+  def synchronized multiply(NumericGrid right) {
     def futures = []
-    if (rows != right.rows) throw new Exception("Matrix A and Matrix B must be same size");
+    if (rows != right.rows) {
+      throw new Exception("Matrix A and Matrix B must be same size");
+    }
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.times(data[i],right.data[i]))
     }
@@ -249,7 +278,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def multiply(Number right) {
+  def synchronized multiply(Number right) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -262,7 +291,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def div(NumericGrid right) {
+  def synchronized div(NumericGrid right) {
     def futures = []
     if (rows != right.rows) throw new Exception("Matrix A and Matrix B must be same size");
     for (int i = 0; i < rows; i++) {
@@ -275,7 +304,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def div(Number value) {
+  def synchronized div(Number value) {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.divScalar(data[i],value.doubleValue()))
@@ -287,7 +316,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def leftDivScalar(Number leftDivScalar) {
+  def synchronized leftDivScalar(Number leftDivScalar) {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.leftDivScalar(data[i],value.doubleValue()))
@@ -299,7 +328,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def minus(NumericGrid right) {
+  def synchronized minus(NumericGrid right) {
     def futures = []
     if (rows != right.rows) throw new Exception("Matrix A and Matrix B must be same size");
     for (int i = 0; i < rows; i++) {
@@ -312,7 +341,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def minus(Number value) {
+  def synchronized minus(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -325,7 +354,7 @@ public class NumericGrid {
     return new NumericGrid(results,rows,cols)
   }
 
-  def leftMinusScalar(Number value) {
+  def synchronized leftMinusScalar(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -339,7 +368,7 @@ public class NumericGrid {
 
   }
 
-  def collectAbove(Number value) {
+  def synchronized collectAbove(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -353,13 +382,8 @@ public class NumericGrid {
     results
   }
 
-  def createCorrelateNormal(Number coor) {
-    def z2 = NumericGrid.createQuasiGaussian(rows,cols)
-    z2.shuffle()
-    return multiply(coor) * (1 - coor * coor) * z2
-  }
 
-  def collectBelow(Number value) {
+  def synchronized collectBelow(Number value) {
     def futures = []
 
     for (int i = 0; i < rows; i++) {
@@ -374,7 +398,7 @@ public class NumericGrid {
   }
 
 
-  def exp = {
+  def synchronized exp() {
     def futures = []
     for (int i = 0; i < rows; i++) {
       futures << ParallelMathHelper.getService().submit( ParallelMathHelper.exp(data[i]))
@@ -384,46 +408,6 @@ public class NumericGrid {
       results[i] = futures[i].get()
     }
     return new NumericGrid(results,rows,cols)
-  }
-
-  public static NumericGrid createUniformDistribution(int rows, int cols) {
-    int col = 0;
-    int row = 0;
-    double step = 1.0 / (rows * cols + 1)
-    double value = 0.0
-    double[][] data = new double[rows][cols]
-    while (value <= 0.50) {
-      data[row][col] = value;
-      data[rows-row-1][cols-col-1] = 1.0-value
-      value += step
-      if (col >= cols) {
-        col = 0
-        row++
-      }
-    }
-  }
-
-  public static NumericGrid createQuasiGaussian(def rows, cols) {
-    rows = (int)rows
-    cols = (int)cols
-    int col = 0;
-    int row = 0;
-    double step = 1.0 / (rows * cols + 1)
-    double draw = step
-    double[][] data = new double[rows][cols]
-    while (draw <= 0.50) {
-      def value = normalDist.inverseCumulativeProbability(draw)
-      //double value = StatUtil.getInvCDF(draw,true)
-      data[row][col] = value;
-      data[rows-row-1][cols-col-1] = -value
-      col++
-      if (col >= cols) {
-        col = 0
-        row++
-      }
-      draw += step;
-    }
-    return new NumericGrid(data,rows,cols)
   }
 
 
@@ -446,9 +430,11 @@ public class NumericGrid {
     return buffer.toString();
   }
 
-  def size() {
+  def synchronized size() {
     rows * cols
   }
+
+ 
 
   def static enhanceNumber() {
     Math.metaClass.'static'.max = { NumericGrid matrix, Number value ->
@@ -509,7 +495,7 @@ public class NumericGrid {
   }
 
   public static void test(String[] args) {
-    def guassian = NumericGrid.createQuasiGaussian(100,100)
+    def guassian = ProbabilitySpace.createQuasiGaussian(1000,1000)
     NumericGrid.enhanceNumber()
     println guassian
     guassian.shuffle()
@@ -523,8 +509,18 @@ public class NumericGrid {
   }
 
   public static void main(String[] args) {
-    def guassian = NumericGrid.createQuasiGaussian(1000,1000)
-    NumericGrid.enhanceNumber()
+    def guassian = ProbabilitySpace.createQuasiGaussian(1000,1000)
+    500.times {
+      def start = System.currentTimeMillis()
+      guassian.shuffle()
+      println guassian
+      println "${(System.currentTimeMillis() - start)/1000.0}"
+    }
+  }
+
+  public static void test2(String[] args) {
+    def guassian = ProbabilitySpace.createQuasiGaussian(1000,1000)
+
     def size = guassian.size();
     double drift = 0.05 - 0.5 * 0.15 * 0.15
     def strikes = [80, 90, 100, 110, 120]

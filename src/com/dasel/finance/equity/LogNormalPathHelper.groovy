@@ -15,4 +15,10 @@ public class LogNormalPathHelper {
     def diffusion = Math.sqrt(time) * vol * random
     spot * Math.exp(drift + diffusion)
   }
+
+  def generatePathsWithJumps(def random, poisson) {
+    def drift = (rate - 0.5 * vol * vol) * time
+    def diffusion = Math.sqrt(time) * vol * random
+    spot * Math.exp(drift + diffusion)
+  }
 }
