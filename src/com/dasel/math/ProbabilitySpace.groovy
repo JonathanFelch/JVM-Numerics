@@ -12,6 +12,7 @@ import org.apache.commons.math.distribution.NormalDistributionImpl
 
 public class ProbabilitySpace  {
   static NormalDistributionImpl normalDist = new NormalDistributionImpl()
+  static Random random = new Random()
 
   public static NumericGrid createUniformDistribution(int rows, int cols) {
      int col = 0;
@@ -39,12 +40,7 @@ public class ProbabilitySpace  {
     int populationSize = rows * cols
     int eventCount = jump.frequency * populationSize
     for (int i = 0; i < eventCount; i++) {
-      data[row][col] = jump.intensity
-      col++
-      if (col >= cols) {
-        col = 0
-        row++
-      }
+
     }
     def grid = new NumericGrid(data,rows,cols)
     grid.shuffle()
@@ -52,36 +48,13 @@ public class ProbabilitySpace  {
   }
 
     public static NumericGrid createScaledQuasiGaussian(def rows, cols, scale) {
+      def power = (Math.log(scale as double) / Math.log(2.0d) as int) + 1.0 as double
       rows = rows as int;
       cols = cols as int;
       int col = 0;
       int row = 0;
-      double step = 1.0 / (rows * cols * scale + 1)
-      double draw = step
-      def data = new double[rows][cols]
-      while (draw <= 0.50) {
-        def value = normalDist.inverseCumulativeProbability(draw)
-        //double value = StatUtil.getInvCDF(draw,true)
-        data[row][col] = value;
-        data[rows-row-1][cols-col-1] = -value
-        col++
-        if (col >= cols) {
-          col = 0
-          row++
-        }
-        draw += step*scale;
-      }
-      return new NumericGrid(data,rows,cols)
-    }
-
-
-  public static NumericGrid createQuasiGaussian(def rows, cols) {
-      rows = rows as int;
-      cols = cols as int;
-      int col = 0;
-      int row = 0;
-      double step = 1.0 / (rows * cols + 1)
-      double draw = step
+      double step = 1.0 / (rows * cols * + 1)
+      double draw = step *  ((scale % power + 1) / scale)
       def data = new double[rows][cols]
       while (draw <= 0.50) {
         def value = normalDist.inverseCumulativeProbability(draw)
@@ -98,10 +71,25 @@ public class ProbabilitySpace  {
       return new NumericGrid(data,rows,cols)
     }
 
+
+  public static NumericGrid createQuasiGaussian(def rows, cols) {
+      return createScaledQuasiGaussian(rows,cols,1)
+    }
+
   def synchronized createCorrelateNormal(NumericGrid grid, Number coor) {
     def z2 = NumericGrid.createQuasiGaussian(rows,cols)
     z2.shuffle()
     return grid.multiply(coor) * (1 - coor * coor) * z2
+  }
+
+  public static void main(String ... args) {
+    10.times { it ->
+      int index = it + 1
+      def probSpace = createScaledQuasiGaussian(1000,1000,index)
+      println probSpace
+      println "\nINDEX: ${index} MEAN: ${probSpace.avg()} STD DEV: ${probSpace.stdDev()}\n"
+    }
+    NumericGrid.shutdownPool()
   }
 
 }

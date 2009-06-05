@@ -21,7 +21,9 @@ import com.dasel.math.ProbabilitySpace
  */
 
 public class MonteCarloEngine {
-  def static final MAX_ITERATIONS = 250000
+  def sampleCount = 0
+  def sampleWidth = null
+  def static final MAX_COLLECTION_SIZE = 250000
   def stochasticDimensions = 1
   def mandatoryIterations = null//6500
   def size = 100
@@ -31,14 +33,14 @@ public class MonteCarloEngine {
   def paths = null
   def yieldCurve = new LinearInterpolation([ 0.003:0.05, 1000:0.05])
   //def yieldCurve = new LinearInterpolation([ 0.003:0.0125, 0.25:0.025, 0.5:0.04, 1.0: 0.05, 2.0: 0.0591, 3.0:0554, 5.0:0.0634, 7.0:0.0625, 10.0:0.03125, 30.0:0.0425 ])
-  def priceAccuracy = 0.01
+  def priceAccuracy = 0.005
   def convergenceTest = { size, standardDeviation ->
     def stdErr = standardDeviation / Math.sqrt(size)
     1.96 * stdErr 
   }
   def stochasticProcess = { size ->
     def length = Math.round(Math.sqrt(size)) + 1
-    ProbabilitySpace.createQuasiGaussian(length,length)
+    ProbabilitySpace.createScaledQuasiGaussian(length,length,sampleCount)
   }
 
 
@@ -53,8 +55,24 @@ public class MonteCarloEngine {
   }
 
   def generateFixedNumberOfPaths(count) {
-    def stochaticVariables = stochasticProcess(count)
-    paths = pathGenerator(stochaticVariables)
+    if (count < MAX_COLLECTION_SIZE) {
+      def stochaticVariables = stochasticProcess(count)
+      paths = pathGenerator(stochaticVariables)
+    } else {
+      def balance = count
+      while (balance > 0) {
+        def sampleSize = Math.min(balance as double, MAX_COLLECTION_SIZE as double)
+        def stochaticVariables = stochasticProcess(sampleSize)
+        def sample = pathGenerator(stochaticVariables)
+        if (!paths) {
+          paths = sample
+        } else {
+          paths.appendVertically(sample)
+        }
+
+        balance =- sampleSize
+      }
+    }
     paths
   }
 
@@ -68,13 +86,15 @@ public class MonteCarloEngine {
       stdErr = convergenceTest(size,stdDev)
     }
     size *= 1.05 // account for the small sample behind the std dev estimate
-    size = Math.min(size,MAX_ITERATIONS)
+    size = Math.min(size,MAX_COLLECTION_SIZE)
     paths = generateFixedNumberOfPaths(size)
+    sampleCount = 1
     stdDev = paths.stdDev()
     stdErr = convergenceTest(size,stdDev)
-    while (stdErr > priceAccuracy && size < MAX_ITERATIONS) {
+    while (stdErr > priceAccuracy && size ) {
       size *= Math.max(stdErr / priceAccuracy,1.25)
-      size = Math.min(size,MAX_ITERATIONS)
+      size = Math.min(size,MAX_COLLECTION_SIZE)
+      scale++
       paths = generateFixedNumberOfPaths(size)
       stdErr = convergenceTest(size,stdDev)
       stdDev = paths.stdDev()
@@ -122,15 +142,8 @@ public class MonteCarloEngine {
       engine.options << new SimpleOption( strike : strike, payoutType : PayoutType.Call, name : "${strike} Strike 1 Yr Call" )
     }
     engine.stochasticProcess = { size ->
-      def retVal = []
       def length = Math.round(Math.sqrt(size)) + 1
-      retVal << ProbabilitySpace.createQuasiGaussian(length,length)
-      retVal << ProbabilitySpace.createPoissonProcess(length, length,
-              new PoissonProcess(frequency : 0.15, intensity : 0.5))
-      retVal << ProbabilitySpace.createPoissonProcess(length, length,
-              new PoissonProcess(frequency : 0.05, intensity : -0.95))
-      retVal
-
+      ProbabilitySpace.createQuasiGaussian(length,length)
     }
     LogNormalPathHelper brownianMotion = new LogNormalPathHelper(spot : 100, vol : 0.15, rate : 0.05, time : 1.0)
     def randomWalk = { random ->
@@ -151,7 +164,7 @@ public class MonteCarloEngine {
       brownianMotion.spot * Math.exp(drift + diffusion + takeout + defaultRisk)
     }
 
-    engine.pathGenerator = brownianMotionWithJumps
+    engine.pathGenerator = randomWalk
     def options = engine.runSimulation() 
     //options.each { option, price ->
     //  println "Contract: ${option.name} was priced @ ${frmt.format(price)} over ${engine.size} iterations"

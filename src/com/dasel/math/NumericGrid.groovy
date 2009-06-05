@@ -79,24 +79,7 @@ public class NumericGrid {
   def synchronized shuffle() {
     ParallelMathHelper.shuffle(data).call()
   }
- /*
-  def shuffle() {
-    def biglist = []
-    for (int i = 0; i < rows; i++) {
-      double[] vector = data[i]
-      def list = Arrays.asList(vector)
-      biglist.addAll(list)
-    }
-    Collections.shuffle(biglist)
-    int index = 0;
-    for (int i = 0; i < rows; i++) {
-      for (int j = 0; j < cols; j++) {
-        data[i][j] = biglist[index]
-        index++
-      }
-    }
-  }
-  */
+
 
   def synchronized sqrt() {
     def futures = []
@@ -137,7 +120,13 @@ public class NumericGrid {
   }
 
   def synchronized stdDev() {
-    minus(avg()).square().avg().sqrt()
+    Math.sqrt(variance())
+  }
+
+  def synchronized variance() {
+    def meanSquared = Math.pow(avg(),2)
+    def var = (sumOfSquares()/size() - meanSquared)
+    var
   }
 
   def synchronized valueOrAbove(Number value) {
@@ -154,8 +143,25 @@ public class NumericGrid {
   }
 
   def synchronized square() {
-    multiply(this)
+    def futures = []
+    for (int i = 0; i < rows; i++) {
+      futures << ParallelMathHelper.getService().submit( ParallelMathHelper.square(data[i]))
+    }
+    double[][] results = new double[rows][];
+    for (int i = 0; i < rows; i++) {
+      results[i] = futures[i].get()
+    }
+    return new NumericGrid(results,rows,cols)
   }
+
+  def synchronized sumOfSquares() {
+    def futures = []
+    for (int i = 0; i < rows; i++) {
+      futures << ParallelMathHelper.getService().submit( ParallelMathHelper.sumOfSquares(data[i]))
+    }
+    futures.collect{ it.get() }.sum()
+  }
+
 
   def synchronized valueOrBelow(Number value) {
     def futures = []

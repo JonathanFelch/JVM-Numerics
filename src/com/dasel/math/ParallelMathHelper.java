@@ -130,6 +130,33 @@ public class ParallelMathHelper {
         };
     }
 
+    public static Callable square(final double[] data) {
+        return new Callable() {
+            int len = data.length;
+            double[] square = new double[len];
+            public Object call() throws Exception {
+                for (int i = 0; i < data.length; i++) {
+                    double temp = data[i];
+                    square[i] = temp * temp;
+                }
+                return square;
+            }
+        };
+    }
+
+    public static Callable sumOfSquares(final double[] data) {
+        return new Callable() {
+            int len = data.length;
+            double sum = 0;
+            public Object call() throws Exception {
+                for (int i = 0; i < data.length; i++) {
+                    double temp = data[i];
+                    sum += temp * temp;
+                }
+                return sum;
+            }
+        };
+    }
 
     public static Callable shuffle(final double[][] data) {
         final int rows = data.length;
